@@ -8,6 +8,9 @@
 ![Screenshot_20241220-170724_Kiwi Browser](https://github.com/user-attachments/assets/f2869d11-cc4e-45d2-99f2-969add9e2d83)
 
 ## open the extension after adding it, then go to devtool in your browser
+
+## click on the long hexadec string that starts with 12...
+
 ![Screenshot_20241220-171427_Kiwi Browser](https://github.com/user-attachments/assets/ff7da434-fad0-4fbf-a2e1-c5c1df63eb8d)
 
 ## Go back to the tab where the extension is opened and refresh it. once done, go back to the devtools tab and click on network
