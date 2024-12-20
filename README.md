@@ -50,3 +50,14 @@ node bless.js
 ## it will ask for your user bearer, paste it there. the bearer looks like this eyhxdg...xyz.eydhdg...xyz.ysjahhsahdy...hdh_dhd_hhfjs
 ## it will prompt IP option enter 2
 
+![Screenshot_20241220-230602_Termux](https://github.com/user-attachments/assets/4e7d1051-9c2c-4699-bac0-1426238dd166)
+
+## when you see "status:ok" that means you are connected!
+
+# Note that, you need to keep your ID and bearer close because it will always ask for it whenever you want to run it.
+
+# Also, you'll see error frequently, that's due to network. Be sure not to use one wifi to farm two accounts.
+
+# Once you start it, you can minimize your termux app it will keep working in the background provided you allowed background data for termux and your internet connection is on.
+
+## Thanks!
