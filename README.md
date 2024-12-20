@@ -9,3 +9,8 @@
 
 ## open the extension after adding it, then go to devtool in your browser
 ![Screenshot_20241220-171427_Kiwi Browser](https://github.com/user-attachments/assets/ff7da434-fad0-4fbf-a2e1-c5c1df63eb8d)
+
+## Go back to the tab where the extension is opened and refresh it. once done, go back to the devtools tab and click on network
+
+![Screenshot_20241220-172441_Kiwi Browser](https://github.com/user-attachments/assets/95789942-00c3-40c3-ab24-82df2c9c1745)
+
