@@ -42,3 +42,4 @@ npm install
 ```shell
 node bless.js
 ```
+![Screenshot_20241220-230255_Termux](https://github.com/user-attachments/assets/9ce98f9b-e6db-4a70-ba6e-3d870574d796)
