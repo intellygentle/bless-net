@@ -26,4 +26,7 @@
 
 ## now open your vscode connected to Ubuntu or termux connected to Ubuntu 
 
-
+```shell
+git clone https://github.com/intellygentle/bless-net.git
+cd bless-net
+```
