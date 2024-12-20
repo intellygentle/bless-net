@@ -30,3 +30,15 @@
 git clone https://github.com/intellygentle/bless-net.git
 cd bless-net
 ```
+```shell
+sudo apt update
+sudo apt install -y nodejs npm
+```
+
+```shell
+npm install
+```
+
+```shell
+node bless.js
+```
