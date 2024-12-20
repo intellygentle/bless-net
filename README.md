@@ -43,3 +43,10 @@ npm install
 node bless.js
 ```
 ![Screenshot_20241220-230255_Termux](https://github.com/user-attachments/assets/9ce98f9b-e6db-4a70-ba6e-3d870574d796)
+
+## in the screenshot above, after using the node bless.js command, it asked for node and hardware ID
+## note that you need to paste it in this format 12D...xyz:53647...
+## it will ask for it again, just type done and enter
+## it will ask for your user bearer, paste it there. the bearer looks like this eyhxdg...xyz.eydhdg...xyz.ysjahhsahdy...hdh_dhd_hhfjs
+## it will prompt IP option enter 2
+
