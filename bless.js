@@ -54,15 +54,14 @@ async function fetchIpAddress(fetch) {
             }
             break;
         case '2':
-            const response = await fetch(ipServiceUrl);
-            ipAddress = (await response.json()).ip;
+            ipAddress = await retryFetch(ipServiceUrl, {}, true).then(response => response.json()).then(data => data.ip);
             break;
         case '3':
             ipAddress = getLocalIpAddress();
             break;
         default:
             console.error("Invalid choice. Defaulting to external IP service.");
-            ipAddress = (await (await fetch(ipServiceUrl)).json()).ip;
+            ipAddress = await retryFetch(ipServiceUrl, {}, true).then(response => response.json()).then(data => data.ip);
     }
 
     console.log(`Using IP address: ${ipAddress}`);
@@ -95,20 +94,22 @@ async function setupFiles() {
 }
 
 // Retry function for fetch requests
-async function retryFetch(url, options, retries = 3, delay = 1000) {
-    try {
-        const response = await fetch(url, { ...options, timeout: 30000 }); // 30-second timeout
-        if (!response.ok) {
-            throw new Error(`HTTP Error: ${response.statusText}`);
+async function retryFetch(url, options, infiniteRetry = false, retries = 3, delay = 1000) {
+    while (true) {
+        try {
+            const response = await fetch(url, { ...options, timeout: 30000 }); // 30-second timeout
+            if (!response.ok) {
+                throw new Error(`HTTP Error: ${response.statusText}`);
+            }
+            return response;
+        } catch (error) {
+            if (!infiniteRetry && retries === 0) {
+                throw error;
+            }
+            console.error(`Retrying request to ${url} due to error: ${error.message}`);
+            await new Promise(resolve => setTimeout(resolve, delay)); // wait before retry
+            retries = infiniteRetry ? retries : retries - 1;
         }
-        return response;
-    } catch (error) {
-        if (retries === 0) {
-            throw error;
-        }
-        console.error(`Retrying request to ${url} due to error: ${error.message}`);
-        await new Promise(resolve => setTimeout(resolve, delay)); // wait before retry
-        return retryFetch(url, options, retries - 1, delay);
     }
 }
 
@@ -134,50 +135,54 @@ async function runAll() {
             continue;
         }
 
-        try {
-            const authToken = (await fs.readFile(path.resolve(__dirname, 'user.txt'), 'utf-8')).trim();
+        while (true) {
+            try {
+                const authToken = (await fs.readFile(path.resolve(__dirname, 'user.txt'), 'utf-8')).trim();
 
-            // Register Node
-            const regResponse = await retryFetch(`${apiBaseUrl}/nodes/${nodeId}`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${authToken}`
-                },
-                body: JSON.stringify({ ipAddress, hardwareId })
-            });
-            const regData = await regResponse.json();
-            console.log(`[${new Date().toISOString()}] Registration response for ${nodeId}:`, regData);
+                // Register Node
+                const regResponse = await retryFetch(`${apiBaseUrl}/nodes/${nodeId}`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({ ipAddress, hardwareId })
+                }, true);
+                const regData = await regResponse.json();
+                console.log(`[${new Date().toISOString()}] Registration response for ${nodeId}:`, regData);
 
-            // Start Session
-            const sessionResponse = await retryFetch(`${apiBaseUrl}/nodes/${nodeId}/start-session`, {
-                method: "POST",
-                headers: { Authorization: `Bearer ${authToken}` }
-            });
-            const sessionData = await sessionResponse.json();
-            console.log(`[${new Date().toISOString()}] Session started for ${nodeId}:`, sessionData);
-
-            // Ping Node and check isB7SConnected
-            const pingNode = async () => {
-                const pingResponse = await retryFetch(`${apiBaseUrl}/nodes/${nodeId}/ping`, {
+                // Start Session
+                const sessionResponse = await retryFetch(`${apiBaseUrl}/nodes/${nodeId}/start-session`, {
                     method: "POST",
                     headers: { Authorization: `Bearer ${authToken}` }
-                });
-                const pingData = await pingResponse.json();
-                console.log(`[${new Date().toISOString()}] Ping response for ${nodeId}:`, pingData);
+                }, true);
+                const sessionData = await sessionResponse.json();
+                console.log(`[${new Date().toISOString()}] Session started for ${nodeId}:`, sessionData);
 
-                if (pingData.isB7SConnected) {
-                    console.log(`[${new Date().toISOString()}] Node ${nodeId} is now connected to B7S.`);
-                }
-            };
+                // Ping Node and check isB7SConnected
+                const pingNode = async () => {
+                    const pingResponse = await retryFetch(`${apiBaseUrl}/nodes/${nodeId}/ping`, {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${authToken}` }
+                    });
+                    const pingData = await pingResponse.json();
+                    console.log(`[${new Date().toISOString()}] Ping response for ${nodeId}:`, pingData);
 
-            // Initial ping
-            await pingNode();
+                    if (pingData.isB7SConnected) {
+                        console.log(`[${new Date().toISOString()}] Node ${nodeId} is now connected to B7S.`);
+                    }
+                };
 
-            // Set up interval for periodic pings
-            setInterval(pingNode, 60000); // Ping every 60 seconds
-        } catch (error) {
-            console.error(`[${new Date().toISOString()}] Error processing node ${nodeId}: ${error.message}`);
+                // Initial ping
+                await pingNode();
+
+                // Set up interval for periodic pings
+                setInterval(pingNode, 60000); // Ping every 60 seconds
+                break;
+            } catch (error) {
+                console.error(`[${new Date().toISOString()}] Error processing node ${nodeId}. Retrying: ${error.message}`);
+                await new Promise(resolve => setTimeout(resolve, 5000)); // Retry after delay
+            }
         }
     }
 }
