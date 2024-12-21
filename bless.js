@@ -94,6 +94,24 @@ async function setupFiles() {
     }
 }
 
+// Retry function for fetch requests
+async function retryFetch(url, options, retries = 3, delay = 1000) {
+    try {
+        const response = await fetch(url, { ...options, timeout: 30000 }); // 30-second timeout
+        if (!response.ok) {
+            throw new Error(`HTTP Error: ${response.statusText}`);
+        }
+        return response;
+    } catch (error) {
+        if (retries === 0) {
+            throw error;
+        }
+        console.error(`Retrying request to ${url} due to error: ${error.message}`);
+        await new Promise(resolve => setTimeout(resolve, delay)); // wait before retry
+        return retryFetch(url, options, retries - 1, delay);
+    }
+}
+
 // Main function to run the program
 async function runAll() {
     const fetch = await import('node-fetch').then(module => module.default);
@@ -120,7 +138,7 @@ async function runAll() {
             const authToken = (await fs.readFile(path.resolve(__dirname, 'user.txt'), 'utf-8')).trim();
 
             // Register Node
-            const regResponse = await fetch(`${apiBaseUrl}/nodes/${nodeId}`, {
+            const regResponse = await retryFetch(`${apiBaseUrl}/nodes/${nodeId}`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -132,7 +150,7 @@ async function runAll() {
             console.log(`[${new Date().toISOString()}] Registration response for ${nodeId}:`, regData);
 
             // Start Session
-            const sessionResponse = await fetch(`${apiBaseUrl}/nodes/${nodeId}/start-session`, {
+            const sessionResponse = await retryFetch(`${apiBaseUrl}/nodes/${nodeId}/start-session`, {
                 method: "POST",
                 headers: { Authorization: `Bearer ${authToken}` }
             });
@@ -141,7 +159,7 @@ async function runAll() {
 
             // Ping Node and check isB7SConnected
             const pingNode = async () => {
-                const pingResponse = await fetch(`${apiBaseUrl}/nodes/${nodeId}/ping`, {
+                const pingResponse = await retryFetch(`${apiBaseUrl}/nodes/${nodeId}/ping`, {
                     method: "POST",
                     headers: { Authorization: `Bearer ${authToken}` }
                 });
@@ -150,8 +168,6 @@ async function runAll() {
 
                 if (pingData.isB7SConnected) {
                     console.log(`[${new Date().toISOString()}] Node ${nodeId} is now connected to B7S.`);
-                } else {
-                    console.log(`[${new Date().toISOString()}] Node ${nodeId} is NOT connected to B7S.`);
                 }
             };
 
