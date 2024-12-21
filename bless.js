@@ -1,21 +1,12 @@
 const fs = require('fs').promises;
 const readline = require('readline');
-const os = require('os');  // To check local network IP
+const path = require('path');
+const os = require('os');
 
 const apiBaseUrl = "https://gateway-run.bls.dev/api/v1";
 const ipServiceUrl = "https://tight-block-2413.txlabs.workers.dev";
 
-// Utility function to validate IP address format
-function isValidIP(ip) {
-    const ipRegex = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-    return ipRegex.test(ip);
-}
-
-async function loadFetch() {
-    const fetch = await import('node-fetch').then(module => module.default);
-    return fetch;
-}
-
+// Utility function for user input
 async function promptInput(promptMessage) {
     const rl = readline.createInterface({
         input: process.stdin,
@@ -30,230 +21,149 @@ async function promptInput(promptMessage) {
     });
 }
 
-async function createIdFile() {
-    const ids = [];
-    console.log("Enter node IDs and hardware IDs in the format nodeId:hardwareId. Type 'done' to finish.");
-
-    while (true) {
-        const input = await promptInput("Node ID and Hardware ID: ");
-        if (input.toLowerCase() === 'done') break;
-        if (input.includes(':')) {
-            ids.push(input);
-        } else {
-            console.log("Invalid format. Please use nodeId:hardwareId.");
-        }
-    }
-
-    await fs.writeFile('id.txt', ids.join('\n'), 'utf-8');
-    console.log("id.txt has been created.");
+// Utility function to validate IP format
+function isValidIP(ip) {
+    const ipRegex = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    return ipRegex.test(ip);
 }
 
-async function createUserFile() {
-    const authToken = await promptInput("Enter your user auth bearer token: ");
-    await fs.writeFile('user.txt', authToken, 'utf-8');
-    console.log("user.txt has been created.");
-}
-
-async function readNodeAndHardwareIds() {
-    const data = await fs.readFile('id.txt', 'utf-8');
-    const ids = data.trim().split('\n').filter(id => id).map(id => {
-        const [nodeId, hardwareId] = id.split(':');
-        return { nodeId, hardwareId };
-    });
-    return ids;
-}
-
-async function readAuthToken() {
-    const data = await fs.readFile('user.txt', 'utf-8');
-    return data.trim();
-}
-
-async function fetchIpAddress(fetch) {
-    let ipAddress = await promptInput("Would you like to (1) Enter your IP address manually, (2) Fetch IP from service, or (3) Use local network IP? (1/2/3): ");
-    
-    if (ipAddress === '1') {
-        ipAddress = await promptInput("Please enter your IP address: ");
-        // Validate the entered IP address
-        if (!isValidIP(ipAddress)) {
-            console.log("Invalid IP address format. Please enter a valid IPv4 address.");
-            return fetchIpAddress(fetch); // Retry if invalid
-        }
-    } else if (ipAddress === '2') {
-        // Fetch IP using external service
-        const response = await fetch(ipServiceUrl);
-        const data = await response.json();
-        console.log(`[${new Date().toISOString()}] IP fetch response:`, data);
-        ipAddress = data.ip;
-    } else if (ipAddress === '3') {
-        // Query local network IP
-        ipAddress = getLocalIpAddress();
-        console.log(`[${new Date().toISOString()}] Local network IP:`, ipAddress);
-    } else {
-        console.log("Invalid option. Defaulting to fetching IP from the external service.");
-        // Default to external service
-        const response = await fetch(ipServiceUrl);
-        const data = await response.json();
-        ipAddress = data.ip;
-    }
-
-    return ipAddress;
-}
-
-// Function to get local IP address from the network
+// Utility function to fetch the local network IP
 function getLocalIpAddress() {
-    const networkInterfaces = os.networkInterfaces();
-    for (const interfaceName in networkInterfaces) {
-        for (const interfaceDetails of networkInterfaces[interfaceName]) {
-            if (!interfaceDetails.internal && interfaceDetails.family === 'IPv4') {
-                return interfaceDetails.address;
+    const interfaces = os.networkInterfaces();
+    for (const name in interfaces) {
+        for (const details of interfaces[name]) {
+            if (!details.internal && details.family === 'IPv4') {
+                return details.address;
             }
         }
     }
-    return '127.0.0.1'; // Default to localhost if no external IP found
+    return '127.0.0.1';
 }
 
-async function registerNode(nodeId, hardwareId, ipAddress) {
-    const fetch = await loadFetch();
-    const authToken = await readAuthToken();
+// Fetch the public IP or use local IP
+async function fetchIpAddress(fetch) {
+    const choice = await promptInput("Choose IP option: (1) Manual, (2) Fetch from Service, (3) Local network IP (1/2/3): ");
+    let ipAddress;
 
-    const registerUrl = `${apiBaseUrl}/nodes/${nodeId}`;
-    console.log(`[${new Date().toISOString()}] Registering node with IP: ${ipAddress}, Hardware ID: ${hardwareId}`);
-    const response = await fetch(registerUrl, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${authToken}`
-        },
-        body: JSON.stringify({
-            ipAddress,
-            hardwareId
-        })
-    });
+    switch (choice) {
+        case '1':
+            ipAddress = await promptInput("Enter your IP address: ");
+            if (!isValidIP(ipAddress)) {
+                console.error("Invalid IP address. Please try again.");
+                return fetchIpAddress(fetch);
+            }
+            break;
+        case '2':
+            const response = await fetch(ipServiceUrl);
+            ipAddress = (await response.json()).ip;
+            break;
+        case '3':
+            ipAddress = getLocalIpAddress();
+            break;
+        default:
+            console.error("Invalid choice. Defaulting to external IP service.");
+            ipAddress = (await (await fetch(ipServiceUrl)).json()).ip;
+    }
 
-    let data;
+    console.log(`Using IP address: ${ipAddress}`);
+    return ipAddress;
+}
+
+// Prompt and validate `user.txt` and `id.txt`
+async function setupFiles() {
     try {
-        data = await response.json();
+        const userFilePath = path.resolve(__dirname, 'user.txt');
+        let userContent = await fs.readFile(userFilePath, 'utf-8').catch(() => null);
+        if (!userContent) {
+            userContent = await promptInput("Enter your authentication token for user.txt: ");
+            await fs.writeFile(userFilePath, userContent.trim(), 'utf-8');
+            console.log("user.txt has been updated.");
+        }
+
+        const idFilePath = path.resolve(__dirname, 'id.txt');
+        let idContent = await fs.readFile(idFilePath, 'utf-8').catch(() => null);
+        if (!idContent) {
+            console.log("Enter node IDs and hardware IDs in the format 'nodeId:hardwareId', one per line.");
+            idContent = await promptInput("Enter IDs for id.txt: ");
+            await fs.writeFile(idFilePath, idContent.trim(), 'utf-8');
+            console.log("id.txt has been updated.");
+        }
     } catch (error) {
-        const text = await response.text();
-        console.error(`[${new Date().toISOString()}] Failed to parse JSON. Response text:`, text);
+        console.error(`Error during file setup: ${error.message}`);
         throw error;
     }
-
-    console.log(`[${new Date().toISOString()}] Registration response:`, data);
-    return data;
 }
 
-async function startSession(nodeId) {
-    const fetch = await loadFetch();
-    const authToken = await readAuthToken();
+// Main function to run the program
+async function runAll() {
+    const fetch = await import('node-fetch').then(module => module.default);
+    await setupFiles();
 
-    const startSessionUrl = `${apiBaseUrl}/nodes/${nodeId}/start-session`;
-    console.log(`[${new Date().toISOString()}] Starting session for node ${nodeId}, it might take a while...`);
-    const response = await fetch(startSessionUrl, {
-        method: "POST",
-        headers: {
-            Authorization: `Bearer ${authToken}`
+    const idsContent = await fs.readFile(path.resolve(__dirname, 'id.txt'), 'utf-8');
+    const ids = idsContent
+        .trim()
+        .split('\n')
+        .map(line => {
+            const [nodeId, hardwareId] = line.split(':');
+            return { nodeId, hardwareId };
+        });
+
+    const ipAddress = await fetchIpAddress(fetch);
+
+    for (const { nodeId, hardwareId } of ids) {
+        if (!nodeId || !hardwareId) {
+            console.error(`Invalid ID entry: nodeId=${nodeId}, hardwareId=${hardwareId}`);
+            continue;
         }
-    });
-    const data = await response.json();
-    console.log(`[${new Date().toISOString()}] Start session response:`, data);
-    return data;
-}
 
-async function pingNode(nodeId, ipAddress) {
-    const fetch = await loadFetch();
-    const chalk = await import('chalk');
-    const authToken = await readAuthToken();
-
-    const pingUrl = `${apiBaseUrl}/nodes/${nodeId}/ping`;
-    console.log(`[${new Date().toISOString()}] Pinging node ${nodeId} with IP: ${ipAddress}`);
-    const response = await fetch(pingUrl, {
-        method: "POST",
-        headers: {
-            Authorization: `Bearer ${authToken}`
-        }
-    });
-
-    const data = await response.json();
-    
-    const status = data.status;
-    const logMessage = `[${new Date().toISOString()}] Ping response, NodeID: ${chalk.default.green(nodeId)}, Status: ${chalk.default.yellow(status)}, IP: ${ipAddress}`;
-    console.log(logMessage);
-    
-    return data;
-}
-
-
-async function displayHeader() {
-    console.log("");
-    console.log(`██╗███╗   ██╗████████╗███████╗██╗     ██╗     `);
-    console.log(`██║████╗  ██║╚══██╔══╝██╔════╝██║     ██║     `);
-    console.log(`██║██╔██╗ ██║   ██║   █████╗  ██║     ██║     `);
-    console.log(`██║██║╚██╗██║   ██║   ██╔══╝  ██║     ██║     `);
-    console.log(`██║██║ ╚████║   ██║   ███████╗███████╗███████╗`);
-    console.log(`╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝╚══════╝╚══════╝`);
-    console.log(`   follow on X --> https://x.com/Intellygentle`);
-    console.log(`     Reachout to me on X for questions        `);
-    console.log("");
-}
-
-
-async function processNode(nodeId, hardwareId, ipAddress) {
-    while (true) {
         try {
-            console.log(`[${new Date().toISOString()}] Processing nodeId: ${nodeId}, hardwareId: ${hardwareId}, IP: ${ipAddress}`);
-            
-            const registrationResponse = await registerNode(nodeId, hardwareId, ipAddress);
-            console.log(`[${new Date().toISOString()}] Node registration completed for nodeId: ${nodeId}. Response:`, registrationResponse);
-            
-            const startSessionResponse = await startSession(nodeId);
-            console.log(`[${new Date().toISOString()}] Session started for nodeId: ${nodeId}. Response:`, startSessionResponse);
-            
-            console.log(`[${new Date().toISOString()}] Sending initial ping for nodeId: ${nodeId}`);
-            await pingNode(nodeId, ipAddress);
+            const authToken = (await fs.readFile(path.resolve(__dirname, 'user.txt'), 'utf-8')).trim();
 
-            setInterval(async () => {
-                try {
-                    console.log(`[${new Date().toISOString()}] Sending ping for nodeId: ${nodeId}`);
-                    await pingNode(nodeId, ipAddress);
-                } catch (error) {
-                    console.error(`[${new Date().toISOString()}] Error during ping: ${error.message}`);
-                    throw error;
+            // Register Node
+            const regResponse = await fetch(`${apiBaseUrl}/nodes/${nodeId}`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${authToken}`
+                },
+                body: JSON.stringify({ ipAddress, hardwareId })
+            });
+            const regData = await regResponse.json();
+            console.log(`[${new Date().toISOString()}] Registration response for ${nodeId}:`, regData);
+
+            // Start Session
+            const sessionResponse = await fetch(`${apiBaseUrl}/nodes/${nodeId}/start-session`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${authToken}` }
+            });
+            const sessionData = await sessionResponse.json();
+            console.log(`[${new Date().toISOString()}] Session started for ${nodeId}:`, sessionData);
+
+            // Ping Node and check isB7SConnected
+            const pingNode = async () => {
+                const pingResponse = await fetch(`${apiBaseUrl}/nodes/${nodeId}/ping`, {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${authToken}` }
+                });
+                const pingData = await pingResponse.json();
+                console.log(`[${new Date().toISOString()}] Ping response for ${nodeId}:`, pingData);
+
+                if (pingData.isB7SConnected) {
+                    console.log(`[${new Date().toISOString()}] Node ${nodeId} is now connected to B7S.`);
+                } else {
+                    console.log(`[${new Date().toISOString()}] Node ${nodeId} is NOT connected to B7S.`);
                 }
-            }, 60000);
-            
-            break;
+            };
 
+            // Initial ping
+            await pingNode();
+
+            // Set up interval for periodic pings
+            setInterval(pingNode, 60000); // Ping every 60 seconds
         } catch (error) {
-            console.error(`[${new Date().toISOString()}] Error occurred for nodeId: ${nodeId}, restarting process: ${error.message}`);
+            console.error(`[${new Date().toISOString()}] Error processing node ${nodeId}: ${error.message}`);
         }
     }
 }
-
-async function runAll(initialRun = true) {
-    try {
-        if (initialRun) {
-            await displayHeader();
-            await createIdFile();
-            await createUserFile();
-        }
-
-        const ids = await readNodeAndHardwareIds();
-        const ipAddress = await fetchIpAddress(await loadFetch());
-
-        for (let i = 0; i < ids.length; i++) {
-            const { nodeId, hardwareId } = ids[i];
-            processNode(nodeId, hardwareId, ipAddress);
-        }
-    } catch (error) {
-        const chalk = await import('chalk');
-        console.error(chalk.default.yellow(`[${new Date().toISOString()}] An error occurred: ${error.message}`));
-    }
-}
-
-process.on('uncaughtException', (error) => {
-    console.error(`[${new Date().toISOString()}] Uncaught exception: ${error.message}`);
-    runAll(false);
-});
 
 runAll();
